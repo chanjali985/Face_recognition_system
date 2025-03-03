@@ -1,24 +1,28 @@
 import cv2
+import os
 
 # 1) Open the webcam
 cap = cv2.VideoCapture(0)
-cap.set(3, 640)  # Webcam width
-cap.set(4, 480)  # Webcam height
+cap.set(3, 640)  # Set webcam width
+cap.set(4, 480)  # Set webcam height
 
 # 2) Load your background image
-background_path = r'C:\Users\LENOVO\Downloads\Real_time_face_recognition_System\Resources\background.webp'
+background_path = r'C:\Users\anjali\Downloads\Face_recognition_system\Resources\background.PNG'
 imgBackground = cv2.imread(background_path)
-
 if imgBackground is None:
     print("Error: Could not load background image. Check the file path!")
     exit()
+print("Background Shape:", imgBackground.shape)  # e.g., (545, 972, 3)
 
-print("Background Shape:", imgBackground.shape)  # e.g., (1024, 1024, 3)
-
-# 3) Adjusted position and size for the webcam feed
-# Try these values first, then fine-tune if needed
-x_start, y_start = 268, 170     # Shift the feed left/right (x), up/down (y)
-frame_width, frame_height = 382, 395  # Width & height of the webcam in the placeholder
+# 3) Import mode images into a list
+folderModePath = r'Resources\modes'
+Modepathlist = os.listdir(folderModePath)
+imgModeList = []
+print("Mode files:", Modepathlist)
+for path in Modepathlist:
+    full_path = os.path.join(folderModePath, path)
+    imgModeList.append(cv2.imread(full_path))
+print("Number of mode images loaded:", len(imgModeList))
 
 while True:
     success, img = cap.read()
@@ -26,19 +30,19 @@ while True:
         print("Error: Unable to capture webcam feed.")
         continue
 
-    # 4) Resize the webcam frame to fit your placeholder
-    img_resized = cv2.resize(img, (frame_width, frame_height))
-
-    # 5) Create a copy of the background for each loop iteration
+    # Create a fresh copy of the background for each frame
     imgBackgroundCopy = imgBackground.copy()
 
-    # 6) Overlay the webcam feed on the background copy
-    imgBackgroundCopy[y_start : y_start + frame_height, x_start : x_start + frame_width] = img_resized
+    # Overlay the webcam feed onto the background copy.
+    # Choose a region that fits within your background.
+    # For example, starting at row 50 and column 55 gives:
+    # Region: rows 50 to 50+480, columns 55 to 55+640
+    imgBackgroundCopy[56:56+300, 63:63+220] = img
 
-    # 7) Show the result
+    # Display the final result
     cv2.imshow("Face Attendance", imgBackgroundCopy)
 
-    # Press 'q' to exit
+    # Exit on pressing 'q'
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
