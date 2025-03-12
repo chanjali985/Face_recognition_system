@@ -1,6 +1,8 @@
 import cv2
 import os
 import pickle
+import face_recognition
+import numpy as np
 
 # 1) Open the webcam
 cap = cv2.VideoCapture(0)
@@ -40,12 +42,14 @@ for filename in modePathList:
 print(len(imgModeList))
 
 #load the encoding file
+print("Loading encoded file")
 file = open('Encodefile.p','rb')
 encodeListknownwithIds = pickle.load(file)
 file.close()
 
 encodeListknown , studentIds = encodeListknownwithIds
 print(studentIds)
+print("encode file loaded")
 
 while True:
     success, img = cap.read()
@@ -53,6 +57,14 @@ while True:
         print("Error: Unable to capture webcam feed.")
         continue
 
+    imgS=cv2.resize(img,(0,0),None,0.25,0.25)   
+    img = cv2.cvtColor(imgS, cv2.COLOR_BGR2RGB) 
+    
+    faceCurFrame=face_recognition.face_locations(imgS)
+    encodeCurrFrame=face_recognition.face_encodings(imgS,faceCurFrame)#have the location now find the encoding of the image
+    
+    
+    
     # Resize webcam to fit within the selected area
     img_resized = cv2.resize(img, (webcam_width, webcam_height))
 
@@ -67,12 +79,34 @@ while True:
 
     imgBackgroundCopy[Y1:Y2, X1:X2] = node_img_resized
 
+    
+    for encodeFace,Faceloc in zip(encodeCurrFrame,faceCurFrame):
+        matches=face_recognition.compare_faces(encodeListknown,encodeFace)
+        faceDis=face_recognition.face_distance(encodeListknown,encodeFace)
+        print("matches",matches)
+        print("faceDis",faceDis)
+
+        matchIndex=np.argmin(faceDis)
+        print(matchIndex)
+        
+        if matches[matchIndex]:
+            print("known face detected")
+            y1, x2, y2, x1= Faceloc
+            
+            cvzone.cornerRect(imgBackgroundCopy,bbox,rt=0)
+            
+            
+        
+        
+        
+    
+    
     # Display the final result
     cv2.imshow("Face Attendance", imgBackgroundCopy)
 
     # Exit 
     # 
-    # on pressing 'q'
+    # on pressing 'q'    
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
