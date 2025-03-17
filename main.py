@@ -91,9 +91,15 @@ while True:
         
         if matches[matchIndex]:
             print("known face detected")
-            y1, x2, y2, x1= Faceloc
             
-            cvzone.cornerRect(imgBackgroundCopy,bbox,rt=0)
+            
+            y1,x2,y2,x1=Faceloc
+            y1,x2,y2,x1=y1*4,x2*4,y2*4,x1*4
+             # Draw bounding box
+            cv2.rectangle(imgBackgroundCopy, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(imgBackgroundCopy, f"ID: {studentIds[matchIndex]}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+           
             
             
         
