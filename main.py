@@ -15,41 +15,27 @@ imgBackground = cv2.imread(background_path)
 if imgBackground is None:
     print("Error: Could not load background image. Check the file path!")
     exit()
-print("Background Shape:", imgBackground.shape)  # Should be (545, 972, 3)
 
-# Define placement region
-x1, y1 = 41, 112  # Top-left corner of the webcam overlay
-x2, y2 = 529, 486  # Bottom-right corner
-webcam_width = x2 - x1  # 488
-webcam_height = y2 - y1  # 374
+# Define placement region for webcam and node image
+x1, y1, x2, y2 = 41, 112, 529, 486  # Webcam overlay region
+X1, Y1, X2, Y2 = 616, 40, 911, 502  # Node overlay region
 
-X1,Y1=616,40
-X2,Y2=911,502
+webcam_width, webcam_height = x2 - x1, y2 - y1
+node_image_width, node_image_height = X2 - X1, Y2 - Y1
 
-node_image_width=X2-X1 # 295
-node_image_height=Y2-Y1 # 460
-
-
-#importing the mode images into the List
-folderModepath=(r'Resources\modes')
+# Import mode images into a list
+folderModepath = r'Resources\modes'
 modePathList = os.listdir(folderModepath)
-imgModeList=[]
-print(modePathList)
+imgModeList = [cv2.imread(os.path.join(folderModepath, filename)) for filename in modePathList]
 
-for filename in modePathList:
-    imgModeList.append(cv2.imread(os.path.join(folderModepath,filename)))
-
-print(len(imgModeList))
-
-#load the encoding file
-print("Loading encoded file")
-file = open('Encodefile.p','rb')
+# Load the encoding file
+print("Loading encoded file...")
+file = open('Encodefile.p', 'rb')
 encodeListknownwithIds = pickle.load(file)
 file.close()
 
-encodeListknown , studentIds = encodeListknownwithIds
-print(studentIds)
-print("encode file loaded")
+encodeListknown, studentIds = encodeListknownwithIds
+print("Encode file loaded:", studentIds)
 
 while True:
     success, img = cap.read()
@@ -57,18 +43,16 @@ while True:
         print("Error: Unable to capture webcam feed.")
         continue
 
-    imgS=cv2.resize(img,(0,0),None,0.25,0.25)   
-    img = cv2.cvtColor(imgS, cv2.COLOR_BGR2RGB) 
-    
-    faceCurFrame=face_recognition.face_locations(imgS)
-    encodeCurrFrame=face_recognition.face_encodings(imgS,faceCurFrame)#have the location now find the encoding of the image
-    
-    
-    
-    # Resize webcam to fit within the selected area
-    img_resized = cv2.resize(img, (webcam_width, webcam_height))
+    # **✅ FIXED: Correct image processing order**
+    imgS = cv2.resize(img, (0, 0), fx=0.25, fy=0.25)   
+    imgS = cv2.cvtColor(imgS, cv2.COLOR_BGR2RGB)  
 
-    # Resize node image  to fit within the selected area
+    # Detect faces & encode them
+    faceCurFrame = face_recognition.face_locations(imgS)
+    encodeCurrFrame = face_recognition.face_encodings(imgS, faceCurFrame)
+
+    # Resize webcam and node images
+    img_resized = cv2.resize(img, (webcam_width, webcam_height))
     node_img_resized = cv2.resize(imgModeList[1], (node_image_width, node_image_height))
 
     # Copy background image
@@ -76,43 +60,32 @@ while True:
 
     # Overlay resized webcam feed onto the background
     imgBackgroundCopy[y1:y2, x1:x2] = img_resized  
-
     imgBackgroundCopy[Y1:Y2, X1:X2] = node_img_resized
 
-    
-    for encodeFace,Faceloc in zip(encodeCurrFrame,faceCurFrame):
-        matches=face_recognition.compare_faces(encodeListknown,encodeFace)
-        faceDis=face_recognition.face_distance(encodeListknown,encodeFace)
-        print("matches",matches)
-        print("faceDis",faceDis)
+    # Loop through detected faces
+    for encodeFace, faceLoc in zip(encodeCurrFrame, faceCurFrame):
+        y1, x2, y2, x1 = faceLoc
+        y1, x2, y2, x1 = y1 * 4, x2 * 4, y2 * 4, x1 * 4
 
-        matchIndex=np.argmin(faceDis)
-        print(matchIndex)
-        
-        if matches[matchIndex]:
-            print("known face detected")
-            
-            
-            y1,x2,y2,x1=Faceloc
-            y1,x2,y2,x1=y1*4,x2*4,y2*4,x1*4
-             # Draw bounding box
-            cv2.rectangle(imgBackgroundCopy, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(imgBackgroundCopy, f"ID: {studentIds[matchIndex]}", (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-           
-            
-            
-        
-        
-        
-    
-    
+        # Draw rectangle for all detected faces (Red for unknown initially)
+        cv2.rectangle(imgBackgroundCopy, (x1, y1), (x2, y2), (0, 0, 255), 2)
+
+        #  Match face inside the loop
+        matches = face_recognition.compare_faces(encodeListknown, encodeFace)
+        faceDis = face_recognition.face_distance(encodeListknown, encodeFace)
+
+        if matches and len(matches) > 0:
+            matchIndex = np.argmin(faceDis)
+            if matches[matchIndex]:  # Face is known
+                print("Known face detected")
+                cv2.rectangle(imgBackgroundCopy, (x1, y1), (x2, y2), (0, 255, 0), 2)  # Green for known faces
+                cv2.putText(imgBackgroundCopy, f"ID: {studentIds[matchIndex]}", (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+
     # Display the final result
     cv2.imshow("Face Attendance", imgBackgroundCopy)
 
-    # Exit 
-    # 
-    # on pressing 'q'    
+    # Exit on pressing 'q'
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
