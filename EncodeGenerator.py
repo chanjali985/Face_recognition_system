@@ -1,52 +1,43 @@
+# EncodeGenerator.py
 import cv2
 import face_recognition
 import pickle
 import os
 
-#importing the students images
+# Folder containing images
+folderImagePath = 'images'
+imgList = []
+studentIds = []
 
-folderImagePath='images'
-folderImagelist= os.listdir(folderImagePath)
-imgList=[]
-studentIds=[]
+for filename in os.listdir(folderImagePath):
+    path = os.path.join(folderImagePath, filename)
+    img = cv2.imread(path)
+    if img is not None:
+        imgList.append(img)
+        studentIds.append(os.path.splitext(filename)[0])
 
+print(f"Total images found: {len(imgList)}")
+print("Student IDs:", studentIds)
 
-for filename in folderImagelist:
-    imgList.append(cv2.imread(os.path.join(folderImagePath,filename)))
-    #print(filename)
-   # print(os.path.splitext(filename)[0])
-    studentIds.append(os.path.splitext(filename)[0])
-    
-    
-print(len(imgList))
-print(studentIds)
-
-
-#loop through the each images and encode every single image we have
-#Encoding steps:- 1. change the color from BGR to RGB 
 def findEncodings(imagesList):
-    encodeList=[]
-    for img in imagesList:
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        encode = face_recognition.face_encodings(img)[0]
-        encodeList.append(encode)
-    
-        
+    encodeList = []
+    for idx, img in enumerate(imagesList):
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        encodings = face_recognition.face_encodings(img_rgb)
+        if len(encodings) > 0:
+            encodeList.append(encodings[0])
+            print(f"[{idx+1}/{len(imagesList)}] Encoded: {studentIds[idx]}")
+        else:
+            print(f"[{idx+1}/{len(imagesList)}] ⚠️ No face found in {studentIds[idx]}")
     return encodeList
-print("Encoding started ")
-encodeListknown=findEncodings(imgList)
-#print(encodeListknown)
 
-# for endoings associated to the ids
-encodeListknownwithIds = (encodeListknown,studentIds)
+print("Encoding started...")
+encodeListKnown = findEncodings(imgList)
+encodeListKnownWithIds = (encodeListKnown, studentIds)
+print("Encoding complete.")
 
-print("Encoding complete")
-        
-# need to save these encodings in the pickle file for later use
+# Save encodings
+with open("Encodefile.p", 'wb') as file:
+    pickle.dump(encodeListKnownWithIds, file)
 
-file  = open("Encodefile.p",'wb')
-pickle.dump(encodeListknownwithIds,file)
-
-
-print("file saved")
-file.close()
+print("✅ Encodefile.p saved successfully!")

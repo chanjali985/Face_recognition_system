@@ -1,3 +1,5 @@
+#(Optional) GUI / display logic for background & webcam positioning
+
 import cv2
 
 # Load background image

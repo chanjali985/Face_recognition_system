@@ -1,93 +1,151 @@
-import cv2
+# main.py
 import os
+import cv2
 import pickle
-import face_recognition
 import numpy as np
+import time
+import face_recognition
+from eval_metrics import evaluate_face_recognition
 
-# 1) Open the webcam
-cap = cv2.VideoCapture(0)
-cap.set(3, 640)  # Original Webcam width
-cap.set(4, 480)  # Original Webcam height
 
-# 2) Load background image
-background_path = r'C:\Users\anjali\Downloads\Face_recognition_system\Resources\background.PNG'
-imgBackground = cv2.imread(background_path)
-if imgBackground is None:
-    print("Error: Could not load background image. Check the file path!")
-    exit()
+# -------------------------------
+# Helper Functions
+# -------------------------------
+def load_images_from_folder(folder):
+    """Load all valid images from a given folder."""
+    valid_exts = ('.jpg', '.jpeg', '.png')
+    images = []
 
-# Define placement region for webcam and node image
-x1, y1, x2, y2 = 41, 112, 529, 486  # Webcam overlay region
-X1, Y1, X2, Y2 = 616, 40, 911, 502  # Node overlay region
+    if not os.path.exists(folder):
+        print(f"[❌] Folder not found: {folder}")
+        return images
 
-webcam_width, webcam_height = x2 - x1, y2 - y1
-node_image_width, node_image_height = X2 - X1, Y2 - Y1
+    for file in os.listdir(folder):
+        if file.lower().endswith(valid_exts):
+            img_path = os.path.join(folder, file)
+            img = cv2.imread(img_path)
+            if img is not None:
+                images.append(img)
+            else:
+                print(f"[⚠️] Could not read image: {file}")
 
-# Import mode images into a list
-folderModepath = r'Resources\modes'
-modePathList = os.listdir(folderModepath)
-imgModeList = [cv2.imread(os.path.join(folderModepath, filename)) for filename in modePathList]
+    if not images:
+        print(f"[⚠️] No valid images found in folder: {folder}")
 
-# Load the encoding file
-print("Loading encoded file...")
-file = open('Encodefile.p', 'rb')
-encodeListknownwithIds = pickle.load(file)
-file.close()
+    return images
 
-encodeListknown, studentIds = encodeListknownwithIds
-print("Encode file loaded:", studentIds)
 
-while True:
-    success, img = cap.read()
-    if not success:
-        print("Error: Unable to capture webcam feed.")
-        continue
+def load_encodings(encode_path="Encodefile.p"):
+    """Load face encodings and student IDs."""
+    if not os.path.exists(encode_path):
+        raise FileNotFoundError(f"{encode_path} not found! Run EncodeGenerator.py first.")
 
-    # **✅ FIXED: Correct image processing order**
-    imgS = cv2.resize(img, (0, 0), fx=0.25, fy=0.25)   
-    imgS = cv2.cvtColor(imgS, cv2.COLOR_BGR2RGB)  
+    print("[ℹ️] Loading face encodings...")
+    with open(encode_path, 'rb') as file:
+        encodeListKnown, studentIds = pickle.load(file)
+    print(f"[✅] Encodings loaded for {len(studentIds)} users: {studentIds}")
+    return encodeListKnown, studentIds
 
-    # Detect faces & encode them
-    faceCurFrame = face_recognition.face_locations(imgS)
-    encodeCurrFrame = face_recognition.face_encodings(imgS, faceCurFrame)
 
-    # Resize webcam and node images
-    img_resized = cv2.resize(img, (webcam_width, webcam_height))
-    node_img_resized = cv2.resize(imgModeList[1], (node_image_width, node_image_height))
+def load_background(path):
+    """Load background image."""
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Background image not found: {path}")
+    img = cv2.imread(path)
+    if img is None:
+        raise ValueError(f"Could not load background from {path}")
+    return img
 
-    # Copy background image
-    imgBackgroundCopy = imgBackground.copy()
 
-    # Overlay resized webcam feed onto the background
-    imgBackgroundCopy[y1:y2, x1:x2] = img_resized  
-    imgBackgroundCopy[Y1:Y2, X1:X2] = node_img_resized
+# -------------------------------
+# Main Function
+# -------------------------------
+def main():
+    # Setup webcam
+    cap = cv2.VideoCapture(0)
+    cap.set(3, 640)
+    cap.set(4, 480)
 
-    # Loop through detected faces
-    for encodeFace, faceLoc in zip(encodeCurrFrame, faceCurFrame):
-        y1, x2, y2, x1 = faceLoc
-        y1, x2, y2, x1 = y1 * 4, x2 * 4, y2 * 4, x1 * 4
+    # Load assets
+    imgBackground = load_background('Resources/background.PNG')
+    imgModeList = load_images_from_folder('Resources/modes')
+    encodeListKnown, studentIds = load_encodings()
 
-        # Draw rectangle for all detected faces (Red for unknown initially)
-        cv2.rectangle(imgBackgroundCopy, (x1, y1), (x2, y2), (0, 0, 255), 2)
+    # Verify mode images
+    if len(imgModeList) == 0:
+        raise ValueError("[❌] No mode images found in Resources/modes!")
 
-        #  Match face inside the loop
-        matches = face_recognition.compare_faces(encodeListknown, encodeFace)
-        faceDis = face_recognition.face_distance(encodeListknown, encodeFace)
+    # Placement regions
+    x1, y1, x2, y2 = 41, 112, 529, 486
+    X1, Y1, X2, Y2 = 616, 40, 911, 502
+    webcam_width, webcam_height = x2 - x1, y2 - y1
+    node_image_width, node_image_height = X2 - X1, Y2 - Y1
 
-        if matches and len(matches) > 0:
-            matchIndex = np.argmin(faceDis)
-            if matches[matchIndex]:  # Face is known
-                print("Known face detected")
-                cv2.rectangle(imgBackgroundCopy, (x1, y1), (x2, y2), (0, 255, 0), 2)  # Green for known faces
-                cv2.putText(imgBackgroundCopy, f"ID: {studentIds[matchIndex]}", (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    # FPS counter
+    prev_time = 0
 
-    # Display the final result
-    cv2.imshow("Face Attendance", imgBackgroundCopy)
+    print("[🚀] Starting Face Recognition System...")
+    while True:
+        success, img = cap.read()
+        if not success:
+            print("[⚠️] Webcam read failed.")
+            continue
 
-    # Exit on pressing 'q'
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+        # Reduce frame size for faster processing
+        imgS = cv2.resize(img, (0, 0), fx=0.25, fy=0.25)
+        imgS = cv2.cvtColor(imgS, cv2.COLOR_BGR2RGB)
 
-cap.release()
-cv2.destroyAllWindows()
+        faceCurFrame = face_recognition.face_locations(imgS)
+        encodeCurrFrame = face_recognition.face_encodings(imgS, faceCurFrame)
+
+        imgBackgroundCopy = imgBackground.copy()
+        imgBackgroundCopy[y1:y2, x1:x2] = cv2.resize(img, (webcam_width, webcam_height))
+        imgBackgroundCopy[Y1:Y2, X1:X2] = cv2.resize(imgModeList[0], (node_image_width, node_image_height))
+
+        for encodeFace, faceLoc in zip(encodeCurrFrame, faceCurFrame):
+            y1_, x2_, y2_, x1_ = [v * 4 for v in faceLoc]
+            matches = face_recognition.compare_faces(encodeListKnown, encodeFace)
+            faceDis = face_recognition.face_distance(encodeListKnown, encodeFace)
+
+            name, color = "Unknown", (0, 0, 255)
+
+            if matches and len(matches) > 0:
+                matchIndex = np.argmin(faceDis)
+                if matches[matchIndex]:
+                    name = studentIds[matchIndex]
+                    color = (0, 255, 0)
+                    y_true = [studentIds[matchIndex]]
+                    y_pred = [studentIds[matchIndex]]
+                else:
+                    y_true = [studentIds[matchIndex]]
+                    y_pred = ["Unknown"]
+
+                # ✅ Evaluate recognition metrics
+                evaluate_face_recognition(y_true, y_pred)
+
+            cv2.rectangle(imgBackgroundCopy, (x1_, y1_), (x2_, y2_), color, 2)
+            cv2.putText(imgBackgroundCopy, name, (x1_, y1_ - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+
+        # FPS
+        curr_time = time.time()
+        fps = 1 / (curr_time - prev_time) if prev_time else 0
+        prev_time = curr_time
+
+        cv2.putText(imgBackgroundCopy, f"FPS: {int(fps)}", (20, 60),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
+
+        cv2.imshow("Face Recognition System", imgBackgroundCopy)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            print("\n[👋] Exiting system...")
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+
+# -------------------------------
+# Entry Point
+# -------------------------------
+if __name__ == "__main__":
+    main()

@@ -22,3 +22,21 @@ Install dependencies using pip:
 ```bash
 pip install opencv-python face_recognition numpy
 ```
+Face_recognition_system/
+│
+├── app.py                      # GUI / background position helper (done)
+├── EncodeGenerator.py           # Generate and save encodings
+├── main.py                      # Run live recognition
+├── images/                      # Known person images
+│     ├── anjali.jpg
+│     ├── rahul.jpg
+│     └── ...
+├── Resources/
+│     ├── background.PNG
+│     ├── modes/
+│     │    ├── 1.png
+│     │    ├── 2.png
+│     │    └── ...
+├── Encodefile.p                 # Generated pickle file
+├── requirements.txt
+└── README.md
