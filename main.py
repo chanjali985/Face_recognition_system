@@ -1,11 +1,58 @@
-# main.py
 import os
 import cv2
 import pickle
 import numpy as np
 import time
 import face_recognition
+import mysql.connector
+from mysql.connector import Error
+from datetime import datetime
+from attendance import mark_attendance
 from eval_metrics import evaluate_face_recognition
+
+
+# -------------------------------
+# ✅ MySQL Database Setup
+# -------------------------------
+def mark_attendance_in_db(name):
+    try:
+        connection = mysql.connector.connect(
+            host="localhost",
+            user="root",          # your MySQL username
+            password="yourpassword",  # your MySQL password
+            database="face_attendance"
+        )
+        cursor = connection.cursor()
+
+        print(f"[DB] ✅ Connected to MySQL")
+
+        # 1️⃣ Check if student exists
+        cursor.execute("SELECT id FROM students WHERE name = %s", (name,))
+        result = cursor.fetchone()
+
+        if result:
+            student_id = result[0]
+            now = datetime.now()
+            date = now.date()
+            time = now.time()
+
+            cursor.execute("""
+                INSERT INTO attendance (student_id, date, time)
+                VALUES (%s, %s, %s)
+            """, (student_id, date, time))
+
+            connection.commit()
+            print(f"[DB] 📥 Attendance recorded for {name} at {time}")
+        else:
+            print(f"[DB] ⚠️ Student '{name}' not found in DB — please register in 'students' table.")
+
+    except mysql.connector.Error as err:
+        print(f"[DB] ❌ Error: {err}")
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'connection' in locals() and connection.is_connected():
+            connection.close()
 
 
 # -------------------------------
@@ -71,7 +118,6 @@ def main():
     imgModeList = load_images_from_folder('Resources/modes')
     encodeListKnown, studentIds = load_encodings()
 
-    # Verify mode images
     if len(imgModeList) == 0:
         raise ValueError("[❌] No mode images found in Resources/modes!")
 
@@ -81,10 +127,9 @@ def main():
     webcam_width, webcam_height = x2 - x1, y2 - y1
     node_image_width, node_image_height = X2 - X1, Y2 - Y1
 
-    # FPS counter
     prev_time = 0
-
     print("[🚀] Starting Face Recognition System...")
+
     while True:
         success, img = cap.read()
         if not success:
@@ -116,6 +161,15 @@ def main():
                     color = (0, 255, 0)
                     y_true = [studentIds[matchIndex]]
                     y_pred = [studentIds[matchIndex]]
+
+                    print(f"[😀] Recognized face: {name}")
+
+                    # ✅ Mark attendance in CSV
+                    mark_attendance(name)
+
+                    # ✅ Save attendance in DB
+                    save_attendance_to_db(name)
+
                 else:
                     y_true = [studentIds[matchIndex]]
                     y_pred = ["Unknown"]
@@ -127,14 +181,14 @@ def main():
             cv2.putText(imgBackgroundCopy, name, (x1_, y1_ - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
 
-        # FPS
+        # FPS display
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time) if prev_time else 0
         prev_time = curr_time
-
         cv2.putText(imgBackgroundCopy, f"FPS: {int(fps)}", (20, 60),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
 
+        # Show window
         cv2.imshow("Face Recognition System", imgBackgroundCopy)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             print("\n[👋] Exiting system...")
